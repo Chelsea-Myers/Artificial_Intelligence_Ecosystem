@@ -1,3 +1,13 @@
 # AI Image Processing and Classification Project
 
 This project is designed to give you hands-on experience working with an image classifier and enhancing your programming skills using AI assistance. The project has two parts, each focused on different aspects of image classification and processing. By the end, you'll have explored fundamental concepts like Grad-CAM, image classification, and creative image filtering.
+
+## Project Summary
+
+In Part 1 I built an image classification system using a pre trained MobileNetV2 model and added Grad CAM to understand how the network makes its decisions. When I tested it on a giant panda image, the model identified it with 96 percent confidence while giving almost no probability to similar animals, which showed strong accuracy. In Part 2 I shifted into image processing by first studying how Gaussian blur works and then creating four artistic filters including oil painting, vintage, cartoon, and neon glow. This showed how different mathematical operations can completely change the style of the same image.
+
+The Grad CAM heatmap gave me clear insight into how the classifier was thinking. It focused on the panda's most recognizable features such as the black eye patches, the rounded ears, and the sharp contrast in the black and white fur pattern, while barely reacting to the background. This confirmed that the model was paying attention to the right visual cues instead of relying on random context that had nothing to do with identifying the animal.
+
+For the filters, each one produced a different artistic effect. The oil painting filter simplified colors, boosted saturation, and added edge texture to make the image look hand painted. The vintage filter lowered contrast, added warm tones, and applied a vignette to create the look of an older photograph. The cartoon filter simplified colors and added strong black outlines to create a comic style effect. The neon glow filter pushed the colors into a bright and futuristic style by using heavy edge enhancement and glow effects. Together, these filters showed how combinations of convolution operations, color adjustments, and edge detection can transform an image in completely different ways.
+
+Working with assistance throughout this project helped me understand everything much faster. Instead of spending hours digging through confusing documentation or trying to guess what was going wrong in my environment, I received clear explanations of how the techniques worked and why certain methods were better. Being able to adjust code and immediately understand what was happening made the process far more efficient and helped me build a strong understanding of both image classification and image processing.
