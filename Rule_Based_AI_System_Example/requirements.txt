@@ -1,0 +1,120 @@
+========================================
+Symptom-to-Diagnosis Chatbot (Rule-Based AI System)
+========================================
+
+PROJECT OVERVIEW:
+-----------------
+This is a simple rule-based AI system that analyzes user-described symptoms 
+and provides basic health condition assessments with advice. The system uses 
+IF-ELIF-ELSE conditional logic and keyword matching to identify symptom patterns.
+
+IMPORTANT DISCLAIMER:
+This is NOT medical advice and NOT a real diagnostic tool. 
+It is for educational purposes only to demonstrate rule-based AI systems.
+
+
+SYSTEM REQUIREMENTS:
+--------------------
+- Python 3.x (Python 3.6 or higher recommended)
+- No external libraries required (uses only Python standard library)
+- Operating System: Windows, macOS, Linux, or WSL
+
+
+HOW TO RUN THE PROGRAM:
+-----------------------
+
+Option 1: Windows PowerShell / Command Prompt
+   python symptom_chatbot.py
+
+Option 2: Linux / macOS / WSL
+   python3 symptom_chatbot.py
+
+Option 3: Using Python directly
+   1. Open a terminal/command prompt
+   2. Navigate to the project directory
+   3. Run: python symptom_chatbot.py (or python3 symptom_chatbot.py)
+
+
+PROGRAM USAGE:
+--------------
+1. The program will display a welcome message and disclaimer
+2. You will be prompted to describe your symptoms
+3. Enter a description of your symptoms in natural language
+   Example: "I have a runny nose, sore throat, and cough"
+4. The program will analyze your input and provide:
+   - A possible condition assessment
+   - Relevant advice
+5. You can continue entering different symptoms
+6. Type 'quit' or 'exit' to end the program
+
+
+SAMPLE INPUTS TO TRY:
+---------------------
+- "I have a runny nose, sore throat, and cough"
+- "chest pain and shortness of breath"
+- "sneezing and itchy watery eyes"
+- "fever, cough, and body aches"
+- "headache with light sensitivity and nausea"
+- "feeling tired and exhausted"
+
+
+RULE-BASED LOGIC:
+-----------------
+The system uses 7 main rules to assess symptoms:
+
+1. Emergency Symptoms Rule - Detects serious symptoms requiring immediate medical attention
+2. Flu-like Illness Rule - Identifies combination of fever, cough, and body aches
+3. Common Cold Rule - Recognizes congestion, sore throat, and cough without high fever
+4. Allergy Rule - Detects sneezing and itchy eyes without fever
+5. Migraine Rule - Identifies headache with sensitivity to light/sound or nausea
+6. General Fatigue Rule - Recognizes tiredness and mild illness symptoms
+7. Unknown Condition Rule - Default response when symptoms don't match patterns
+
+
+TECHNICAL DETAILS:
+------------------
+- Programming Language: Python 3
+- AI Approach: Rule-Based System (No Machine Learning)
+- Input Processing: Keyword matching on lowercase text
+- Logic Structure: Conditional statements (if-elif-else)
+- No external dependencies or API calls required
+
+
+FILE STRUCTURE:
+---------------
+symptom_chatbot.py - Main program file containing all logic
+README.md - Project documentation and reflection
+LICENSE - Project license information
+requirements.txt - This file (setup and usage instructions)
+
+
+TROUBLESHOOTING:
+----------------
+Issue: "Python was not found"
+Solution: Install Python 3.x from python.org or use 'python3' command
+
+Issue: Program exits immediately
+Solution: Ensure you're running from command line/terminal, not double-clicking
+
+Issue: Symptoms not recognized
+Solution: The system has limited keyword matching. Try using exact phrases 
+         like "runny nose", "sore throat", "chest pain", etc.
+
+
+EDUCATIONAL PURPOSE:
+--------------------
+This project demonstrates:
+- Rule-based AI system design
+- Conditional logic and decision trees
+- Natural language keyword matching
+- User input processing and validation
+- Ethical considerations in health-related AI applications
+
+
+FOR MORE INFORMATION:
+---------------------
+See README.md for detailed project documentation, reflection, and design decisions.
+
+========================================
+End of Requirements Document
+========================================
