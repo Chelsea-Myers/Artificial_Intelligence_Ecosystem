@@ -1,47 +1,46 @@
+# 3.1 Suppress Noisy Logs
 import logging
-from transformers import logging as transformers_logging
+from transformers import logging as hf_logging
 import warnings
-from dotenv import load_dotenv  # Make sure this is imported
+
+# Set log levels to ERROR for specific loggers
+logging.getLogger("langchain.text_splitter").setLevel(logging.ERROR)
+hf_logging.set_verbosity_error()
+
+# Filter Python warnings
+warnings.filterwarnings("ignore")
+
+# 3.2 ChatGPT API Credentials
+from dotenv import load_dotenv
 import os
 import openai
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
-from sentence_transformers import CrossEncoder  # <-- ADDED
-import numpy as np
-import faiss
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Set log levels
-transformers_logging.get_logger("langchain.text_splitter").setLevel(logging.ERROR)
-transformers_logging.set_verbosity_error()
-warnings.filterwarnings("ignore")
+# Read the OpenAI API key and set it
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Retrieve OpenAI API key from environment
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("OpenAI API key not found. Make sure your .env file has OPENAI_API_KEY set.")
+if not openai.api_key:
+    raise ValueError("OPENAI_API_KEY not found in environment variables. Please check your .env file.")
 
-openai.api_key = api_key
+# 3.3 Parameters
+chunk_size = 500
+chunk_overlap = 50
+model_name = "sentence-transformers/all-distilroberta-v1"
+top_k = 20
 
-# Read contents of Selected_Document.txt into text variable
+# Re-ranking parameters
+cross_encoder_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+top_m = 8
+
+# 3.4 Read the Pre-scraped Document
 with open("Selected_Document.txt", "r", encoding="utf-8") as file:
     text = file.read()
 
-# -----------------------------
-# Parameters
-# -----------------------------
-chunk_size = 500
-chunk_overlap = 100
-model_name = "sentence-transformers/all-distilroberta-v1"
+# 3.5 Split into Appropriately-Sized Chunks
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Retrieve K with FAISS, then re-rank to M with a cross-encoder
-top_k = 20                             # <-- CHANGED (from 5)
-cross_encoder_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # <-- ADDED
-top_m = 8                              # <-- ADDED
-
-# Split text into chunks using RecursiveCharacterTextSplitter
 text_splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", " ", ""],
     chunk_size=chunk_size,
@@ -49,113 +48,168 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 chunks = text_splitter.split_text(text)
 
-# Load model and encode chunks (bi-encoder)
-embedder = SentenceTransformer(model_name)
-embeddings = embedder.encode(chunks, show_progress_bar=False)
-embeddings = np.array(embeddings).astype('float32')
+# 3.6 Embed & Build FAISS Index
+from sentence_transformers import SentenceTransformer
+import numpy as np
+import faiss
 
-# Initialize FAISS index and add embeddings
+# Load the embedding model
+model = SentenceTransformer(model_name)
+
+# Encode chunks with progress bar
+embeddings = model.encode(chunks, show_progress_bar=True)
+
+# Convert to NumPy float32 array
+embeddings = np.array(embeddings, dtype=np.float32)
+
+# Initialize FAISS IndexFlatL2 with correct dimension
 dimension = embeddings.shape[1]
-faiss_index = faiss.IndexFlatL2(dimension)
-faiss_index.add(embeddings)
+index = faiss.IndexFlatL2(dimension)
 
-# -----------------------------
-# Retrieval (bi-encoder + FAISS)
-# -----------------------------
-def retrieve_chunks(question: str, k: int = top_k):
+# Add embeddings to the index
+index.add(embeddings)
+
+# 3.7 Retrieval Function
+def retrieve_chunks(question, k=top_k):
     """
-    Encode the question and search the FAISS index for top k similar chunks.
-
+    Retrieve the top k most relevant chunks for a given question.
+    
     Args:
-        question (str): The input question string.
-        k (int): Number of nearest chunks to retrieve (default: top_k).
-
+        question (str): The user's question
+        k (int): Number of chunks to retrieve (default: top_k)
+    
     Returns:
-        List[str]: List of candidate text chunks.
+        list: List of the top k relevant text chunks
     """
-    q_vec = embedder.encode([question], show_progress_bar=False)
-    q_arr = np.array(q_vec).astype('float32')
-    distances, I = faiss_index.search(q_arr, k)
-    return [chunks[i] for i in I[0]]
+    # Encode the question
+    q_vec = model.encode([question], show_progress_bar=False)
+    
+    # Convert to NumPy float32 array
+    q_arr = np.array(q_vec, dtype=np.float32)
+    
+    # Search FAISS index for top k nearest neighbors
+    distances, I = index.search(q_arr, k)
+    
+    # Return corresponding text chunks
+    retrieved_chunks = [chunks[i] for i in I[0]]
+    return retrieved_chunks
 
-# -----------------------------
-# Re-ranking (cross-encoder)
-# -----------------------------
-# Initialize the cross-encoder once
+# 3.8 Implement a Cross-Encoder Re-Ranker
+from sentence_transformers import CrossEncoder
+
+# Initialize the cross-encoder model
 reranker = CrossEncoder(cross_encoder_name)
 
-def _dedupe_preserve_order(items):
+def dedupe_preserve_order(items):
+    """
+    Remove duplicates while preserving first occurrence order.
+    Normalizes whitespace to avoid near-duplicate slices.
+    
+    Args:
+        items (list): List of text chunks
+    
+    Returns:
+        list: Deduplicated list
+    """
     seen = set()
-    out = []
-    for it in items:
-        key = " ".join(it.split())  # normalize whitespace
-        if key not in seen:
-            seen.add(key)
-            out.append(it)
-    return out
+    result = []
+    for item in items:
+        # Normalize whitespace
+        normalized = " ".join(item.split())
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(item)
+    return result
 
-def rerank_chunks(question: str, candidate_chunks: list[str], m: int = top_m) -> list[str]:
+def rerank_chunks(question, candidate_chunks, m=top_m):
     """
-    Score (question, chunk) pairs with a cross-encoder and return the top-m chunks.
+    Re-rank candidate chunks using a cross-encoder and return top m.
+    
+    Args:
+        question (str): The user's question
+        candidate_chunks (list[str]): List of candidate text chunks
+        m (int): Number of top chunks to return (default: top_m)
+    
+    Returns:
+        list[str]: Top m re-ranked chunks after deduplication
     """
-    if not candidate_chunks:
-        return []
-    pairs = [(question, c) for c in candidate_chunks]
-    scores = reranker.predict(pairs)  # higher = more relevant
-    ranked = sorted(zip(candidate_chunks, scores), key=lambda x: float(x[1]), reverse=True)
-    best = [c for c, _ in ranked[:m]]
-    return _dedupe_preserve_order(best)
+    # Create (question, chunk) pairs
+    pairs = [(question, chunk) for chunk in candidate_chunks]
+    
+    # Score pairs with cross-encoder (higher = more relevant)
+    scores = reranker.predict(pairs)
+    
+    # Sort by score descending and select top m
+    scored_chunks = list(zip(candidate_chunks, scores))
+    scored_chunks.sort(key=lambda x: x[1], reverse=True)
+    
+    # Select top m chunks
+    top_chunks = [chunk for chunk, score in scored_chunks[:m]]
+    
+    # Light deduplication
+    top_chunks = dedupe_preserve_order(top_chunks)
+    
+    return top_chunks
 
-# -----------------------------
-# QA with LLM
-# -----------------------------
-def answer_question(question: str) -> str:
+# 3.9 Q&A with ChatGPT
+def answer_question(question):
     """
-    Retrieves candidate chunks, re-ranks them, and uses OpenAI's Chat Completions API to answer.
+    Answer a question using RAG: retrieve chunks, re-rank, and query ChatGPT.
+    
+    Args:
+        question (str): The user's question
+    
+    Returns:
+        str: The assistant's answer
     """
-    # Retrieve candidate chunks via FAISS
-    candidates = retrieve_chunks(question)
-
-    # Re-rank to final context
+    # Step 1: Retrieve candidate chunks (top_k = 20)
+    candidates = retrieve_chunks(question, k=top_k)
+    
+    # Step 2: Re-rank and get top_m chunks
     relevant_chunks = rerank_chunks(question, candidates, m=top_m)
-
-    # Combine chunks into a single context string separated by double newlines
+    
+    # Step 3: Join chunks into a single context string
     context = "\n\n".join(relevant_chunks)
-
-    # System prompt defining the assistant's behavior
+    
+    # Step 4: Define system prompt
     system_prompt = (
         "You are a knowledgeable assistant that answers questions based on the provided context. "
-        "If the answer is not in the context, say you don’t know."
+        "If the answer is not in the context, say you don't know."
     )
-
-    # User prompt including the context and the question
+    
+    # Step 5: Build user prompt
     user_prompt = f"""Context:
 {context}
 
 Question: {question}
 
-Answer:
-"""
-
-    # Call OpenAI Chat Completions with the prompts and parameters
-    resp = openai.chat.completions.create(
-        model="gpt-3.5-turbo",  # You can switch to "gpt-4o" or a newer model if available
+Answer:"""
+    
+    # Step 6: Call OpenAI Chat Completions API
+    response = openai.chat.completions.create(
+        model="gpt-4",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": user_prompt}
         ],
         temperature=0.0,
-        max_tokens=500,
+        max_tokens=500
     )
+    
+    # Step 7: Return the assistant's reply
+    answer = response.choices[0].message.content.strip()
+    return answer
 
-    # Return the assistant's reply text, stripped of whitespace
-    return resp.choices[0].message.content.strip()
-
-
+# 3.10 Interactive Loop
 if __name__ == "__main__":
+    print("RAG Q&A System Ready!")
     print("Enter 'exit' or 'quit' to end.")
+    print()
+    
     while True:
         question = input("Your question: ")
         if question.lower() in ("exit", "quit"):
+            print("Goodbye!")
             break
         print("Answer:", answer_question(question))
+        print()

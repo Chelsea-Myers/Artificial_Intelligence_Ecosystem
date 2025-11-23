@@ -1,11 +1,13 @@
 openai
 python-dotenv
 langchain
-sentence-transformers
+sentence-transformers>=2.7.0
+torch>=2.2
 numpy
 faiss-cpu
 transformers
 requests
 beautifulsoup4
-torch
+pypdf2
+pdfminer.six
 

@@ -1,79 +1,268 @@
-## Description of the document you selected
+# RAG System for Fungi Document Q&A
 
-I selected the Wikipedia article about seahorses.
+## Description of the Document Selected
 
+I selected a comprehensive document about **fungi and their ecological roles**. The document covers:
+
+- **Classification and Biology:** Fungi as a distinct kingdom, including yeasts, molds, and mushrooms
+- **Ecological Roles:** Decomposition, nutrient cycling, and energy flow in ecosystems
+- **Symbiotic Relationships:** Mycorrhizal associations with plants, the "wood wide web" network
+- **Reproduction:** Spore-based reproduction (sexual and asexual), hyphal networks and mycelium
+- **Human Applications:** Food (mushrooms, fermentation), medicine (penicillin, immunosuppressants), bioremediation
+- **Forest Ecosystems:** Wood and leaf litter decomposition, underground fungal networks
+- **Diversity:** Estimated 2.2-3.8 million species, with only ~150,000 formally described
+- **Environmental Adaptation:** Fungi in extreme environments and their role in climate change
+
+This document was chosen because it provides rich, interconnected information ideal for testing RAG retrieval across different topics and question types.
 
 ---
 
-## 5 important questions and answers
+## RAG System Test Questions and Answers
 
-### 1. Why do we need to chunk the text before storing it in the vector database?
+### Experiment 1: Default Parameters (chunk_size=500, chunk_overlap=50)
+
+**Question 1: What role do fungi play in forest ecosystems?**
+
+**Answer:** Fungi play an essential role in decomposing wood and leaf litter in forest ecosystems. Many forest fungi form mycorrhizal associations with trees, creating vast underground networks that connect multiple plants. These networks, sometimes called the 'wood wide web,' allow trees to share nutrients and even communicate with each other through chemical signals.
+
+---
+
+**Question 2: How do fungi reproduce?**
+
+**Answer:** Fungi reproduce through spores, which can be sexual or asexual. These spores are often distributed by wind, water, or animals. When a spore lands in a suitable environment, it germinates and forms a new fungal organism.
+
+---
+
+**Question 3: What medical applications do fungi have?**
+
+**Answer:** Fungi have been used in traditional medicine for centuries, and modern science has validated many of these uses. The antibiotic penicillin, discovered by Alexander Fleming, is produced by the Penicillium fungus. Other medically important compounds derived from fungi include immunosuppressants, cholesterol-lowering drugs, and anticancer agents.
+
+---
+
+## Analysis: Chunk Size and Overlap Experiments
+
+### Experiment 2: Larger Chunks (chunk_size=800, chunk_overlap=100)
+
+**Observations:**
+- **More comprehensive answers** with additional context
+- Answers included connecting information between concepts
+- Example: Forest ecosystem answer added "This makes fungi excellent decomposers in ecosystems, as they convert hard-to-digest polysaccharides into simpler molecules"
+- **Trade-off:** Potentially more verbose, may include some less relevant details
+
+### Experiment 3: Smaller Chunks (chunk_size=300, chunk_overlap=30)
+
+**Observations:**
+- **More concise answers** but sometimes incomplete
+- Lost connecting context between related concepts
+- Example: Reproduction answer became "Fungi reproduce through spores. Spores are distributed by wind, water, or animals." (missing germination and mycelium formation)
+- **Trade-off:** Faster retrieval but fragmented information
+
+### Key Findings:
+
+1. **Chunk Size Impact:**
+   - **500 characters** provides optimal balance between detail and focus
+   - **800 characters** gives more complete context but risks diluting relevance
+   - **300 characters** is too small, causing information fragmentation
+
+2. **Overlap Impact:**
+   - **10% overlap (50/500)** prevents splitting of key concepts at chunk boundaries
+   - Too little overlap risks breaking multi-sentence explanations
+   - Too much overlap (>20%) creates redundancy without significant benefit
+
+3. **Recommendation:**
+   - **chunk_size=500, chunk_overlap=50** is optimal for this document
+   - Provides complete concept coverage while maintaining focused retrieval
+   - Balances answer quality with retrieval speed
+
+---
+
+## Five Deep-Dive Questions About the RAG System
+
+### Question 1: What is embedding dimensionality and why does it matter for RAG systems?
 
 **Answer:**
-Chunking breaks long documents into smaller, manageable pieces that fit within the token limits of language models. It also helps preserve local context, making retrieval more precise. If you indexed entire documents as single chunks, the embeddings would be less focused, and retrieval would be less accurate. Overlapping chunks help ensure continuity across boundaries.
+Embedding dimensionality refers to the number of dimensions in the vector representation of text. In this RAG system, we use the "all-distilroberta-v1" model which produces 768-dimensional embeddings. Each dimension captures different semantic features of the text.
+
+**Why it matters:**
+- Higher dimensions can capture more nuanced semantic relationships
+- More dimensions require more storage and computation
+- The dimension must match between the query embedding and document embeddings for similarity search
+- 768 dimensions is a sweet spot balancing expressiveness and efficiency
+
+**In the code:**
+```python
+model = SentenceTransformer(model_name)  # Creates 768-dim embeddings
+dimension = embeddings.shape[1]  # Gets dimension (768)
+index = faiss.IndexFlatL2(dimension)  # FAISS index matches this dimension
+```
 
 ---
 
-### 2. How is the retrieved text processed before being stored in the vector database?
+### Question 2: How does FAISS IndexFlatL2 search work and what are its trade-offs?
 
 **Answer:**
-After the agent collects the raw text (from a web page or PDF), it is split into smaller chunks using tokenization tools like `tiktoken`. These chunks are typically overlapping segments of a fixed token size (e.g., 300 tokens with 30 token overlap) to preserve context. Each chunk is then converted into a high-dimensional vector embedding using an embedding model like OpenAI’s `text-embedding-3-small`. These embeddings are indexed in a vector store (e.g., FAISS) for efficient similarity search.
+FAISS IndexFlatL2 performs exhaustive nearest neighbor search using L2 (Euclidean) distance. It computes the distance between the query vector and every vector in the index.
+
+**How it works:**
+1. Query vector is encoded into the same dimensional space as documents
+2. FAISS calculates L2 distance: sqrt(Σ(query[i] - doc[i])²) for each document
+3. Returns the k documents with smallest distances (closest matches)
+
+**Trade-offs:**
+- **Pros:** Exact search (no approximation), simple, guaranteed to find true nearest neighbors
+- **Cons:** Slow for large datasets (O(n) complexity), not scalable beyond ~100k vectors
+- **Alternatives:** IndexIVFFlat (faster but approximate), IndexHNSW (graph-based, very fast)
+
+**In the code:**
+```python
+index = faiss.IndexFlatL2(dimension)  # Exact search
+distances, I = index.search(q_arr, k)  # Returns k nearest neighbors
+```
 
 ---
 
-### 3. How does the system find relevant pieces of information to answer a user’s question?
+### Question 3: Why is chunk overlap important and how does it prevent information loss?
 
 **Answer:**
-When a user asks a question, the system embeds the question into the same vector space as the stored chunks. It then queries the vector store to find the top-k chunks most similar to the question vector. These relevant chunks provide the contextual information the model needs to generate accurate and informed answers.
+Chunk overlap creates redundancy at chunk boundaries, ensuring that information spanning multiple chunks isn't split awkwardly.
+
+**The problem without overlap:**
+```
+Chunk 1: "...fungi form mycorrhizal associat"
+Chunk 2: "ions with trees, creating vast..."
+```
+The concept "mycorrhizal associations" is split, making it hard to retrieve.
+
+**With overlap (50 characters):**
+```
+Chunk 1: "...fungi form mycorrhizal associations with trees..."
+Chunk 2: "...mycorrhizal associations with trees, creating vast..."
+```
+Now both chunks contain the complete concept.
+
+**Trade-offs:**
+- **Optimal overlap:** 10-20% of chunk_size (our 50/500 = 10%)
+- **Too little:** Risk splitting important information
+- **Too much:** Redundant storage, slower retrieval, potential duplicate results
+- **Our deduplication:** `dedupe_preserve_order()` removes near-duplicates after re-ranking
 
 ---
 
-### 4. How does the language model use the retrieved chunks to generate an answer?
+### Question 4: What is the purpose of the cross-encoder re-ranker and how does it differ from bi-encoder embeddings?
 
 **Answer:**
-The retrieved chunks are combined into a context block that is provided as part of the prompt to the language model (e.g., GPT-4). The prompt instructs the model to answer the user’s question using **only** the provided context. This constrains the model’s generation to grounded information, improving accuracy and reducing hallucination compared to answering without external knowledge.
+The system uses a two-stage retrieval approach:
+
+**Stage 1 - Bi-Encoder (Fast Retrieval):**
+- Encodes queries and documents separately into fixed-size vectors
+- Uses FAISS for fast similarity search
+- Retrieves top_k=20 candidates
+- Fast but less accurate (can't see query-document interactions)
+
+**Stage 2 - Cross-Encoder (Accurate Re-ranking):**
+- Takes (query, document) pairs and scores them together
+- Model sees both query and document simultaneously
+- Can capture fine-grained relevance
+- Slower but much more accurate
+- Re-ranks 20 candidates down to top_m=8 best matches
+
+**Why this architecture?**
+- Bi-encoder: Fast initial filtering (search millions of documents in milliseconds)
+- Cross-encoder: Precise final selection (score only 20 candidates)
+- Best of both worlds: Speed + Accuracy
+
+**In the code:**
+```python
+# Stage 1: Fast retrieval with bi-encoder
+candidates = retrieve_chunks(question, k=top_k)  # Get 20 candidates
+
+# Stage 2: Accurate re-ranking with cross-encoder
+relevant_chunks = rerank_chunks(question, candidates, m=top_m)  # Keep 8 best
+```
 
 ---
 
-### 5. What types of embeddings are used, and why are they important for this system?
+### Question 5: How does prompt design affect RAG answer quality and what strategies prevent hallucination?
 
 **Answer:**
-The system uses dense vector embeddings produced by transformer-based embedding models (like OpenAI’s `text-embedding-3-small`). These embeddings capture the semantic meaning of text chunks and questions in a numerical format, enabling the vector store to perform similarity searches based on meaning, not just keywords. This semantic search is essential to finding the most relevant context for the user’s queries and is the foundation of how RAG improves the language model’s answers.
+The prompt is the final critical step where retrieved context meets the LLM. Poor prompt design can lead to hallucinations (making up information) even with perfect retrieval.
+
+**Our Prompt Strategy:**
+
+1. **System Prompt - Sets Boundaries:**
+```python
+system_prompt = (
+    "You are a knowledgeable assistant that answers questions based on the "
+    "provided context. If the answer is not in the context, say you don't know."
+)
+```
+- Explicitly instructs to use ONLY provided context
+- Tells model to admit when it doesn't know
+- Prevents relying on training data
+
+2. **User Prompt - Provides Context:**
+```python
+user_prompt = f"""Context:
+{context}
+
+Question: {question}
+
+Answer:"""
+```
+- Clearly labels the context section
+- Separates question from context
+- Simple structure reduces confusion
+
+**Anti-Hallucination Strategies:**
+- ✓ "based on the provided context" - Constrains source
+- ✓ "say you don't know" - Allows uncertainty
+- ✓ temperature=0.0 - Deterministic, less creative
+- ✓ Context first, then question - Clear information hierarchy
+- ✓ Re-ranking ensures relevant chunks - Better context quality
+
+**What NOT to do:**
+- ❌ "Use your knowledge to answer..." - Encourages hallucination
+- ❌ High temperature - More creative but less accurate
+- ❌ Vague instructions - Model fills gaps with training data
+- ❌ No context label - Model confuses context with general knowledge
 
 ---
 
-## 3 Questions and Answer Quality
+## How These Components Work Together
 
-**Your question:** What is a group of seahorses called?
-**Answer:** A group of seahorses is not specifically mentioned in the provided context.
+1. **Document Processing:** Text → Chunks (with overlap) → Embeddings (768-dim)
+2. **Indexing:** Embeddings → FAISS IndexFlatL2 (exact search)
+3. **Query Stage 1:** Question → Embedding → FAISS search → Top 20 candidates
+4. **Query Stage 2:** Cross-encoder re-ranks 20 → Best 8 chunks
+5. **Answer Generation:** 8 chunks + Question → GPT-4 (with anti-hallucination prompt) → Answer
 
+Each component has specific trade-offs that balance accuracy, speed, and reliability.
 
-**Your question:** Does a seahorse have gills?
-**Answer:** Yes, a seahorse has gills.
+---
 
+## Installation and Usage
 
-**Your question:** How many species of seahorses are there?
-**Answer:** There are several species of seahorses mentioned in the provided context, including H. kellogii, H. histrix, H. kuda, H. trimaculatus, H. mohnikei, Hippocampus erectus, and H. zosterae. However, the exact number of seahorse species is not explicitly stated in the context.
+### Setup
+```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-The quality of the answers wasn't great because the Wikipedia article wasn't as detailed as some of them are; however, the model was good at saying when the context didn't supply the answer rather than halucinating.
+# Install dependencies
+pip install -r requirements.txt
 
-To test what happens when I change the chunk size and overlap size, I asked the RAG model to "Tell me about seahorse courtship", which is something I know the Wikipedia article had a section on.
+# Create .env file with your OpenAI API key
+echo "OPENAI_API_KEY=your-key-here" > .env
+```
 
-**Chunk size = 1000**
-**Overlap = 500**
+### Run Text Extraction
+```bash
+python text_extractor.py
+```
 
-**Answer:** Seahorses exhibit four phases of courtship that involve clear behavioral changes and changes in the intensity of the courtship act. Phase 1 is the initial courtship phase that occurs one or two days before physical copulation, where potential mates brighten in color, quiver, and display rapid side-to-side body vibrations. Phase 2 involves the female pointing behavior, followed by the male responding with the same behavior. In Phase 3, both males and females brighten and assume the pointing position, with the male eventually departing. The final phase includes multiple bouts of courtship where the male and female rise together in a water column, culminating in mid-water copulation where the female transfers her eggs into the male's brood pouch. Courtship behavior in seahorses can last for several days and involves synchronized movements and reproductive states to ensure successful egg transfer.
+### Run RAG System
+```bash
+python RAG_app.py
+```
 
-**Chunk size = 500**
-**Chunk overlap = 100**
-
-**Answer:** Seahorse courtship involves four phases that include behavioral changes and changes in the intensity of courtship acts. The courtship behavior includes brightening in color, quivering, rapid side-to-side body vibrations, swimming side by side holding tails, gripping the same strand of sea grass with their tails, and engaging in synchronized movements like the "predawn dance" and "true courtship dance." The final phase of courtship includes bouts of courtship where the male and female rise together in the water column, with the female eventually transferring her eggs to the male. Male seahorses are more aggressive during courtship, engaging in behaviors like tail-wrestling and head snapping to compete for female attention.
-
-
-**Chunk size = 100**
-**Chunk overlap = 50**
-
-**Answer:** Seahorse courtship involves four phases with clear behavioral changes, where displays are performed alternately by both the male and the female seahorse. Before breeding, seahorses may court for several days. The seahorses display no courtship behavior, and females are not bright; males will usually display.
-
-
-In general, it seems like the shorter the chunk size and the less the chunk overlap, the less detailed the answer is.
+Then ask your questions interactively. Type 'exit' or 'quit' to end.
